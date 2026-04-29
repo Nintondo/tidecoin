@@ -128,6 +128,7 @@ jobs:
           ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
           service_base_path: ${{ vars.SERVICE_BASE_PATH }}
           service_dir_name: ${{ vars.SERVICE_DIR_NAME }}
+          service_name: ${{ vars.SERVICE_NAME }}
           docker_compose_file: ${{ vars.DOCKER_COMPOSE_FILE }}
           docker_network: ${{ vars.TIDECOIN_DOCKER_NETWORK }}
           local_compose_file: ${{ env.RENDERED_DIR }}/${{ env.RENDERED_COMPOSE }}

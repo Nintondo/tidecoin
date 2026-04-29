@@ -17,6 +17,9 @@ inputs:
   service_dir_name:
     description: Service directory path under service_base_path.
     required: true
+  service_name:
+    description: Docker Compose service name to restart.
+    required: true
   docker_compose_file:
     description: Docker Compose file name on the server.
     required: true
@@ -51,6 +54,7 @@ runs:
       env:
         SERVICE_BASE_PATH: ${{ inputs.service_base_path }}
         SERVICE_DIR_NAME: ${{ inputs.service_dir_name }}
+        SERVICE_NAME: ${{ inputs.service_name }}
         DOCKER_COMPOSE_FILE: ${{ inputs.docker_compose_file }}
         DOCKER_NETWORK: ${{ inputs.docker_network }}
         LOCAL_COMPOSE_FILE: ${{ inputs.local_compose_file }}
@@ -60,11 +64,11 @@ runs:
         host: ${{ inputs.host }}
         username: ${{ inputs.username }}
         key: ${{ inputs.ssh_private_key }}
-        envs: SERVICE_BASE_PATH,SERVICE_DIR_NAME,DOCKER_COMPOSE_FILE,DOCKER_NETWORK,LOCAL_COMPOSE_FILE,LOCAL_CONFIG_FILE,POST_DEPLOY_SLEEP_SECONDS
+        envs: SERVICE_BASE_PATH,SERVICE_DIR_NAME,SERVICE_NAME,DOCKER_COMPOSE_FILE,DOCKER_NETWORK,LOCAL_COMPOSE_FILE,LOCAL_CONFIG_FILE,POST_DEPLOY_SLEEP_SECONDS
         script: |
           set -euo pipefail
 
-          for var in SERVICE_BASE_PATH SERVICE_DIR_NAME DOCKER_COMPOSE_FILE DOCKER_NETWORK LOCAL_COMPOSE_FILE LOCAL_CONFIG_FILE; do
+          for var in SERVICE_BASE_PATH SERVICE_DIR_NAME SERVICE_NAME DOCKER_COMPOSE_FILE DOCKER_NETWORK LOCAL_COMPOSE_FILE LOCAL_CONFIG_FILE; do
             if [ -z "${!var}" ]; then
               echo "Missing required variable: ${var}" >&2
               exit 1
@@ -87,9 +91,9 @@ runs:
           install -m 0644 "${TMP_CONFIG}" "${SERVICE_PATH}/data/tidecoin.conf"
 
           if [ -f "${ROOT_COMPOSE_FILE}" ]; then
-            docker compose -f "${ROOT_COMPOSE_FILE}" up -d --remove-orphans
+            docker compose -f "${ROOT_COMPOSE_FILE}" up -d --remove-orphans --force-recreate "${SERVICE_NAME}"
           else
-            docker compose -f "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}" up -d --remove-orphans
+            docker compose -f "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}" up -d --remove-orphans --force-recreate "${SERVICE_NAME}"
           fi
 
           if [ -n "${POST_DEPLOY_SLEEP_SECONDS}" ]; then
