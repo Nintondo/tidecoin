@@ -84,7 +84,7 @@ runs:
           fi
 
           install -m 0644 "${TMP_COMPOSE}" "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}"
-          install -m 0600 "${TMP_CONFIG}" "${SERVICE_PATH}/data/tidecoin.conf"
+          install -m 0644 "${TMP_CONFIG}" "${SERVICE_PATH}/data/tidecoin.conf"
 
           if [ -f "${ROOT_COMPOSE_FILE}" ]; then
             docker compose -f "${ROOT_COMPOSE_FILE}" up -d --remove-orphans
