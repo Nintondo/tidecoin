@@ -2,21 +2,20 @@ services:
   ${SERVICE_NAME}:
     image: ${TIDECOIN_IMAGE}
     container_name: ${TIDECOIN_CONTAINER_NAME}
-    restart: unless-stopped
-    stop_grace_period: 10m
-    command:
-      - "${TIDECOIN_CHAIN_FLAG}"
-      - "-printtoconsole"
-      - "-datadir=/data"
-      - "-conf=/data/tidecoin.conf"
+    restart: always
     volumes:
-      - "${TIDECOIN_HOST_DATA_DIR}:/data"
-    networks:
-      - tidecoin-backend
+      - ./data/tidecoin.conf:/data/tidecoin.conf:ro
+      - ./data/node:/data/node:rw
+    ports:
+      - "${TIDECOIN_P2P_PORT}:${TIDECOIN_P2P_PORT}"
+    expose:
+      - "${TIDECOIN_RPC_PORT}"
+    command: ["tidecoind", "-datadir=/data/node", "-conf=/data/tidecoin.conf", "-printtoconsole", "${TIDECOIN_CHAIN_FLAG}"]
+    stop_grace_period: 10m
     healthcheck:
       test:
         - CMD-SHELL
-        - tidecoin-cli ${TIDECOIN_CHAIN_FLAG} -conf=/data/tidecoin.conf getblockcount >/dev/null 2>&1 || exit 1
+        - tidecoin-cli ${TIDECOIN_CHAIN_FLAG} -datadir=/data/node -conf=/data/tidecoin.conf getblockcount >/dev/null 2>&1 || exit 1
       interval: 30s
       timeout: 10s
       retries: 10
@@ -27,8 +26,3 @@ services:
         max-size: 10m
         max-file: "3"
         compress: "true"
-
-networks:
-  tidecoin-backend:
-    name: ${TIDECOIN_DOCKER_NETWORK}
-    external: true

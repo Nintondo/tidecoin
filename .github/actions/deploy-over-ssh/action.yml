@@ -15,7 +15,7 @@ inputs:
     description: Base path on the server.
     required: true
   service_dir_name:
-    description: Service directory name under services/.
+    description: Service directory path under service_base_path.
     required: true
   docker_compose_file:
     description: Docker Compose file name on the server.
@@ -71,10 +71,11 @@ runs:
             fi
           done
 
-          SERVICE_PATH="${SERVICE_BASE_PATH}/services/${SERVICE_DIR_NAME}"
+          SERVICE_PATH="${SERVICE_BASE_PATH}/${SERVICE_DIR_NAME}"
           TMP_BASE="/tmp/tidecoin-deploy"
           TMP_COMPOSE="${TMP_BASE}/${LOCAL_COMPOSE_FILE}"
           TMP_CONFIG="${TMP_BASE}/${LOCAL_CONFIG_FILE}"
+          ROOT_COMPOSE_FILE="${SERVICE_BASE_PATH}/docker-compose.yml"
 
           mkdir -p "${SERVICE_PATH}/data"
 
@@ -85,7 +86,11 @@ runs:
           install -m 0644 "${TMP_COMPOSE}" "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}"
           install -m 0600 "${TMP_CONFIG}" "${SERVICE_PATH}/data/tidecoin.conf"
 
-          docker compose -f "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}" up -d --remove-orphans
+          if [ -f "${ROOT_COMPOSE_FILE}" ]; then
+            docker compose -f "${ROOT_COMPOSE_FILE}" up -d --remove-orphans
+          else
+            docker compose -f "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}" up -d --remove-orphans
+          fi
 
           if [ -n "${POST_DEPLOY_SLEEP_SECONDS}" ]; then
             sleep "${POST_DEPLOY_SLEEP_SECONDS}"
