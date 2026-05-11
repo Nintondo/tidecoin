@@ -1,0 +1,28 @@
+services:
+  ${CONTAINER_NAME}:
+    image: ${IMAGE}
+    container_name: ${CONTAINER_NAME}
+    restart: always
+    volumes:
+      - ./data/tidecoin.conf:/data/tidecoin.conf:ro
+      - ./data/node:/data/node:rw
+    ports:
+      - "${TIDECOIN_P2P_PORT}:${TIDECOIN_P2P_PORT}"
+    expose:
+      - "${TIDECOIN_RPC_PORT}"
+    command: ${TIDECOIN_DAEMON_COMMAND}
+    stop_grace_period: 10m
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - ${TIDECOIN_HEALTHCHECK_COMMAND}
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        compress: "true"

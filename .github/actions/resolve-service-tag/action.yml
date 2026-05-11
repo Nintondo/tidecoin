@@ -1,6 +1,10 @@
 name: Resolve service tag
 description: Resolve SERVICE_TAG for workflow_dispatch or repository_dispatch runs.
-
+inputs:
+  log_ref:
+    description: Whether to log client_payload.ref for repository_dispatch.
+    required: false
+    default: "true"
 runs:
   using: composite
   steps:
@@ -15,14 +19,13 @@ runs:
           else
             echo "SERVICE_TAG=${{ github.sha }}" >> "$GITHUB_ENV"
           fi
-          echo "SOURCE_REF=${{ github.event.client_payload.ref }}" >> "$GITHUB_ENV"
-          exit 0
-        fi
-
-        if [ -n "${{ github.event.inputs.sha }}" ]; then
-          echo "SERVICE_TAG=${{ github.event.inputs.sha }}" >> "$GITHUB_ENV"
+          if [ "${{ inputs.log_ref }}" = "true" ]; then
+            echo "Ref: ${{ github.event.client_payload.ref }}"
+          fi
         else
-          echo "SERVICE_TAG=${{ github.sha }}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.inputs.sha }}" ]; then
+            echo "SERVICE_TAG=${{ github.event.inputs.sha }}" >> "$GITHUB_ENV"
+          else
+            echo "SERVICE_TAG=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
         fi
-
-        echo "SOURCE_REF=${{ github.ref }}" >> "$GITHUB_ENV"

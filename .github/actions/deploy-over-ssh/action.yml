@@ -1,101 +1,162 @@
 name: Deploy over SSH
-description: Copy rendered deployment assets to the server and restart the service.
-
+description: Update rendered Tidecoin service files and restart the service over SSH.
 inputs:
   host:
-    description: SSH host.
+    description: SSH host for deployment.
     required: true
   username:
     description: SSH username.
     required: true
   ssh_private_key:
-    description: SSH private key.
+    description: SSH private key for authentication.
     required: true
-  service_base_path:
-    description: Base path on the server.
+  registry:
+    description: Container registry host.
     required: true
-  service_dir_name:
-    description: Service directory path under service_base_path.
+  registry_repo:
+    description: Container registry repository or namespace.
     required: true
   service_name:
-    description: Docker Compose service name to restart.
+    description: Service directory name.
+    required: true
+  service_tag:
+    description: Image tag to deploy.
     required: true
   docker_compose_file:
-    description: Docker Compose file name on the server.
+    description: Docker compose file path on host (relative to BASE_PATH).
     required: true
-  docker_network:
-    description: External Docker network name to ensure exists.
+  coin:
+    description: Base directory segment.
     required: true
-  local_compose_file:
-    description: Local rendered compose file path.
+  network:
+    description: Network suffix (testnet|mainnet).
     required: true
-  local_config_file:
-    description: Local rendered tidecoin.conf path.
-    required: true
-  post_deploy_sleep_seconds:
-    description: Optional delay after compose up.
+  container_name:
+    description: Docker compose service/container name.
     required: false
-    default: "15"
-
+    default: ""
+  image_name:
+    description: Optional image name override.
+    required: false
+    default: ""
+  service_compose_file:
+    description: Service compose file path under SERVICE_PATH.
+    required: false
+    default: ""
+  compose_updated_file:
+    description: Optional rendered compose file to place on the server.
+    required: false
+    default: ""
+  config_updated_file:
+    description: Optional rendered config file to place as data/tidecoin.conf.
+    required: false
+    default: ""
+  env_updated_file:
+    description: Optional env file to place as .env on the server.
+    required: false
+    default: ""
+  post_deploy_sleep_seconds:
+    description: Sleep time after restart.
+    required: false
+    default: "10"
+  reload_nginx:
+    description: Whether to reload nginx after deploy.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
-    - name: Copy rendered files to server
-      uses: appleboy/scp-action@v1.0.0
-      with:
-        host: ${{ inputs.host }}
-        username: ${{ inputs.username }}
-        key: ${{ inputs.ssh_private_key }}
-        source: "${{ inputs.local_compose_file }},${{ inputs.local_config_file }}"
-        target: /tmp/tidecoin-deploy
-
-    - name: Restart service
+    - name: Deploy service
       uses: appleboy/ssh-action@v1.0.0
       env:
-        SERVICE_BASE_PATH: ${{ inputs.service_base_path }}
-        SERVICE_DIR_NAME: ${{ inputs.service_dir_name }}
+        CI_REGISTRY: ${{ inputs.registry }}
+        CI_REGISTRY_REPO: ${{ inputs.registry_repo }}
         SERVICE_NAME: ${{ inputs.service_name }}
+        SERVICE_TAG: ${{ inputs.service_tag }}
         DOCKER_COMPOSE_FILE: ${{ inputs.docker_compose_file }}
-        DOCKER_NETWORK: ${{ inputs.docker_network }}
-        LOCAL_COMPOSE_FILE: ${{ inputs.local_compose_file }}
-        LOCAL_CONFIG_FILE: ${{ inputs.local_config_file }}
+        COIN: ${{ inputs.coin }}
+        NETWORK: ${{ inputs.network }}
+        CONTAINER_NAME_INPUT: ${{ inputs.container_name }}
+        IMAGE_NAME_OVERRIDE: ${{ inputs.image_name }}
+        SERVICE_COMPOSE_FILE: ${{ inputs.service_compose_file }}
+        COMPOSE_UPDATED_FILE: ${{ inputs.compose_updated_file }}
+        CONFIG_UPDATED_FILE: ${{ inputs.config_updated_file }}
+        ENV_UPDATED_FILE: ${{ inputs.env_updated_file }}
         POST_DEPLOY_SLEEP_SECONDS: ${{ inputs.post_deploy_sleep_seconds }}
+        RELOAD_NGINX: ${{ inputs.reload_nginx }}
       with:
         host: ${{ inputs.host }}
         username: ${{ inputs.username }}
         key: ${{ inputs.ssh_private_key }}
-        envs: SERVICE_BASE_PATH,SERVICE_DIR_NAME,SERVICE_NAME,DOCKER_COMPOSE_FILE,DOCKER_NETWORK,LOCAL_COMPOSE_FILE,LOCAL_CONFIG_FILE,POST_DEPLOY_SLEEP_SECONDS
+        envs: CI_REGISTRY,CI_REGISTRY_REPO,SERVICE_NAME,SERVICE_TAG,DOCKER_COMPOSE_FILE,COIN,NETWORK,CONTAINER_NAME_INPUT,IMAGE_NAME_OVERRIDE,SERVICE_COMPOSE_FILE,COMPOSE_UPDATED_FILE,CONFIG_UPDATED_FILE,ENV_UPDATED_FILE,POST_DEPLOY_SLEEP_SECONDS,RELOAD_NGINX
         script: |
           set -euo pipefail
 
-          for var in SERVICE_BASE_PATH SERVICE_DIR_NAME SERVICE_NAME DOCKER_COMPOSE_FILE DOCKER_NETWORK LOCAL_COMPOSE_FILE LOCAL_CONFIG_FILE; do
+          for var in CI_REGISTRY CI_REGISTRY_REPO SERVICE_NAME SERVICE_TAG DOCKER_COMPOSE_FILE COIN NETWORK; do
             if [ -z "${!var}" ]; then
-              echo "Missing required variable: ${var}" >&2
+              echo "Error: Environment variable ${var} is not set."
               exit 1
             fi
           done
 
-          SERVICE_PATH="${SERVICE_BASE_PATH}/${SERVICE_DIR_NAME}"
-          TMP_BASE="/tmp/tidecoin-deploy"
-          TMP_COMPOSE="${TMP_BASE}/${LOCAL_COMPOSE_FILE}"
-          TMP_CONFIG="${TMP_BASE}/${LOCAL_CONFIG_FILE}"
-          ROOT_COMPOSE_FILE="${SERVICE_BASE_PATH}/docker-compose.yml"
+          BASE_PATH="/opt/${COIN}-${NETWORK}"
+          SERVICE_PATH="${BASE_PATH}/services/${SERVICE_NAME}"
+
+          IMAGE_NAME="${IMAGE_NAME_OVERRIDE}"
+          if [ -z "${IMAGE_NAME}" ]; then
+            IMAGE_NAME="${SERVICE_NAME}"
+          fi
+
+          IMAGE="${CI_REGISTRY}/${CI_REGISTRY_REPO}/${IMAGE_NAME}:${SERVICE_TAG}"
+          CONTAINER="${CONTAINER_NAME_INPUT}"
+          if [ -z "${CONTAINER}" ]; then
+            CONTAINER="${COIN}-${NETWORK}-${SERVICE_NAME}"
+          fi
+
+          TARGET_COMPOSE="${SERVICE_COMPOSE_FILE}"
+          if [ -z "${TARGET_COMPOSE}" ]; then
+            TARGET_COMPOSE="${SERVICE_NAME}.yml"
+          fi
 
           mkdir -p "${SERVICE_PATH}/data"
+          cd "${SERVICE_PATH}"
 
-          if ! docker network inspect "${DOCKER_NETWORK}" >/dev/null 2>&1; then
-            docker network create "${DOCKER_NETWORK}"
+          if [ -n "${COMPOSE_UPDATED_FILE}" ] && [ -f "${COMPOSE_UPDATED_FILE}" ]; then
+            if [ -f "${TARGET_COMPOSE}" ]; then
+              cp "${TARGET_COMPOSE}" "${TARGET_COMPOSE}.old"
+            fi
+            mv "${COMPOSE_UPDATED_FILE}" "${TARGET_COMPOSE}"
+          elif [ -n "${SERVICE_COMPOSE_FILE}" ] && [ -f "${SERVICE_COMPOSE_FILE}" ]; then
+            sed -i "s|image: .*/${IMAGE_NAME}:.*|image: ${IMAGE}|" "${SERVICE_COMPOSE_FILE}"
           fi
 
-          install -m 0644 "${TMP_COMPOSE}" "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}"
-          install -m 0644 "${TMP_CONFIG}" "${SERVICE_PATH}/data/tidecoin.conf"
-
-          if [ -f "${ROOT_COMPOSE_FILE}" ]; then
-            docker compose -f "${ROOT_COMPOSE_FILE}" up -d --remove-orphans --force-recreate "${SERVICE_NAME}"
-          else
-            docker compose -f "${SERVICE_PATH}/${DOCKER_COMPOSE_FILE}" up -d --remove-orphans --force-recreate "${SERVICE_NAME}"
+          if [ -n "${CONFIG_UPDATED_FILE}" ] && [ -f "${CONFIG_UPDATED_FILE}" ]; then
+            if [ -f data/tidecoin.conf ]; then
+              cp data/tidecoin.conf data/tidecoin.conf.old
+            fi
+            mv "${CONFIG_UPDATED_FILE}" data/tidecoin.conf
           fi
+
+          if [ -n "${ENV_UPDATED_FILE}" ] && [ -f "${ENV_UPDATED_FILE}" ]; then
+            if [ -f .env ]; then
+              cp .env .env.old
+            fi
+            mv "${ENV_UPDATED_FILE}" .env
+          fi
+
+          cd "${BASE_PATH}"
+
+          RUN_COMPOSE_FILE="${BASE_PATH}/${DOCKER_COMPOSE_FILE}"
+          if [ ! -f "${RUN_COMPOSE_FILE}" ]; then
+            RUN_COMPOSE_FILE="${SERVICE_PATH}/${TARGET_COMPOSE}"
+          fi
+
+          docker compose -f "${RUN_COMPOSE_FILE}" up -d --force-recreate "${CONTAINER}"
 
           if [ -n "${POST_DEPLOY_SLEEP_SECONDS}" ]; then
             sleep "${POST_DEPLOY_SLEEP_SECONDS}"
+          fi
+
+          if [ "${RELOAD_NGINX}" = "true" ]; then
+            docker exec nginx nginx -s reload || true
           fi

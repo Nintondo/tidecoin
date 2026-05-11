@@ -1,8 +1,0 @@
-blank_issues_enabled: true
-contact_links:
-  - name: Tidecoin Security Policy
-    url: https://github.com/tidecoin/tidecoin/blob/master/SECURITY.md
-    about: View security policy
-  - name: Tidecoin Website
-    url: https://tidecoin.org
-    about: Tidecoin homepage
